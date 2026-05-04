@@ -5,7 +5,8 @@
   "main": "app/server.js",
   "scripts": {
     "start": "node app/server.js",
-    "test": "node --test"
+    "test": "node --test",
+    "harness": "node harness/run.js"
   },
   "dependencies": {
     "express": "^4.21.0"

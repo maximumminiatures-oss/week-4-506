@@ -29,6 +29,16 @@ let publishedDraft = '';
 // Tests may override this via environment variable.
 const SAVE_COMMIT_DELAY_MS = parseInt(process.env.SAVE_COMMIT_DELAY_MS || '200', 10);
 
+const INSTRUMENT_DEBUG = process.env.INSTRUMENT_DEBUG === '1';
+let instrumentSeq = 0;
+
+function instrument(event, detail) {
+  if (!INSTRUMENT_DEBUG) return;
+  const ts = new Date().toISOString();
+  const payload = { ...detail, SAVE_COMMIT_DELAY_MS };
+  console.error(`[${ts}] [race-instr] ${event} ${JSON.stringify(payload)}`);
+}
+
 // ---------------------------------------------------------------------------
 // Routes
 // ---------------------------------------------------------------------------
@@ -43,10 +53,25 @@ app.post('/draft', (req, res) => {
     return res.status(400).json({ error: 'content must be a string' });
   }
 
+  const reqId = ++instrumentSeq;
+  instrument('draft:enter', {
+    reqId,
+    bodyContent: content,
+    currentDraft,
+    publishedDraft,
+  });
+
   // Simulate write latency.
   setTimeout(() => {
+    instrument('draft:commit', {
+      reqId,
+      bodyContent: content,
+      currentDraftBefore: currentDraft,
+    });
     currentDraft = content;
+    instrument('draft:after-commit', { reqId, currentDraft, publishedDraft });
     res.json({ ok: true, saved: content });
+    instrument('draft:response-sent', { reqId, saved: content });
   }, SAVE_COMMIT_DELAY_MS);
 });
 
@@ -56,7 +81,18 @@ app.post('/draft', (req, res) => {
 // in flight (its timeout hasn't fired), publishedDraft will be set to the
 // older saved value, not the in-flight one.
 app.post('/publish', (req, res) => {
+  const reqId = ++instrumentSeq;
+  instrument('publish:enter', {
+    reqId,
+    currentDraftRead: currentDraft,
+    publishedDraftBefore: publishedDraft,
+  });
   publishedDraft = currentDraft;
+  instrument('publish:exit', {
+    reqId,
+    publishedDraft,
+    source: 'publishedDraft := currentDraft (immediate read — stale if save still committing)',
+  });
   res.json({ ok: true, published: publishedDraft });
 });
 
@@ -74,6 +110,7 @@ app.get('/current', (req, res) => {
 app.post('/reset', (req, res) => {
   currentDraft = '';
   publishedDraft = '';
+  instrument('reset', { currentDraft, publishedDraft });
   res.json({ ok: true });
 });
 
