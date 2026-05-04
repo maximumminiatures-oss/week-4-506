@@ -1,41 +1,26 @@
-﻿
+
 > week4-debug-assignment@1.0.0 harness
 > node harness/run.js
 
-=== harness run start 2026-05-04T22:09:48.280Z ===
+=== harness run start 2026-05-04T22:26:55.675Z ===
 SAVE_COMMIT_DELAY_MS=300
-Scenario: POST /reset ΓåÆ save draft A (await) ΓåÆ save draft B (fire-and-forget) + POST /publish in parallel.
+Scenario: POST /reset → save draft A (await) → save draft B (fire-and-forget) + POST /publish in parallel.
 Expected with broken handler: /publish runs before /draft B commits, so publish copies stale currentDraft (draft A).
-node.exe : [2026-05-04T22:09:48.302Z] [race-instr] reset 
-{"currentDraft":"","publishedDraft":"","SAVE_COMMIT_DELAY_MS":300}
-At line:1 char:1
-+ & "C:\Program Files\nodejs/node.exe" "C:\Program Files\nodejs/node_mo ...
-+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-    + CategoryInfo          : NotSpecified: ([2026-05-04T22:..._DELAY_MS":300}:String) [], RemoteException
-    + FullyQualifiedErrorId : NativeCommandError
- 
-[harness] POST /reset ΓåÆ 200
-[2026-05-04T22:09:48.338Z] [race-instr] draft:enter {"reqId":1,"bodyContent":"draft 
-A","currentDraft":"","publishedDraft":"","SAVE_COMMIT_DELAY_MS":300}
-[2026-05-04T22:09:48.660Z] [race-instr] draft:commit {"reqId":1,"bodyContent":"draft 
-A","currentDraftBefore":"","SAVE_COMMIT_DELAY_MS":300}
-[2026-05-04T22:09:48.660Z] [race-instr] draft:after-commit {"reqId":1,"currentDraft":"draft 
-A","publishedDraft":"","SAVE_COMMIT_DELAY_MS":300}
-[2026-05-04T22:09:48.662Z] [race-instr] draft:response-sent {"reqId":1,"saved":"draft A","SAVE_COMMIT_DELAY_MS":300}
+[2026-05-04T22:26:55.696Z] [race-instr] reset {"currentDraft":"","publishedDraft":"","SAVE_COMMIT_DELAY_MS":300}
+[harness] POST /reset → 200
+[2026-05-04T22:26:55.829Z] [race-instr] draft:enter {"reqId":1,"bodyContent":"draft A","currentDraft":"","publishedDraft":"","SAVE_COMMIT_DELAY_MS":300}
+[2026-05-04T22:26:56.137Z] [race-instr] draft:commit {"reqId":1,"bodyContent":"draft A","currentDraftBefore":"","SAVE_COMMIT_DELAY_MS":300}
+[2026-05-04T22:26:56.137Z] [race-instr] draft:after-commit {"reqId":1,"currentDraft":"draft A","publishedDraft":"","SAVE_COMMIT_DELAY_MS":300}
+[2026-05-04T22:26:56.138Z] [race-instr] draft:response-sent {"reqId":1,"saved":"draft A","SAVE_COMMIT_DELAY_MS":300}
 [harness] POST /draft "draft A" completed (committed before next step).
-[2026-05-04T22:09:48.676Z] [race-instr] draft:enter {"reqId":2,"bodyContent":"draft B","currentDraft":"draft 
-A","publishedDraft":"","SAVE_COMMIT_DELAY_MS":300}
-[2026-05-04T22:09:48.677Z] [race-instr] publish:enter {"reqId":3,"currentDraftRead":"draft 
-A","publishedDraftBefore":"","SAVE_COMMIT_DELAY_MS":300}
-[2026-05-04T22:09:48.678Z] [race-instr] publish:exit {"reqId":3,"publishedDraft":"draft A","source":"publishedDraft := 
-currentDraft (immediate read ΓÇö stale if save still committing)","SAVE_COMMIT_DELAY_MS":300}
-[2026-05-04T22:09:48.991Z] [race-instr] draft:commit {"reqId":2,"bodyContent":"draft B","currentDraftBefore":"draft 
-A","SAVE_COMMIT_DELAY_MS":300}
-[2026-05-04T22:09:48.991Z] [race-instr] draft:after-commit {"reqId":2,"currentDraft":"draft B","publishedDraft":"draft 
-A","SAVE_COMMIT_DELAY_MS":300}
-[2026-05-04T22:09:48.992Z] [race-instr] draft:response-sent {"reqId":2,"saved":"draft B","SAVE_COMMIT_DELAY_MS":300}
-[harness] POST /publish ΓåÆ published="draft A"
-[harness] POST /draft "draft B" ΓåÆ saved="draft B"
-[harness] GET /current ΓåÆ {"current":"draft B"}
-[harness] GET /published ΓåÆ {"published":"draft A"}
-=== harness run end 2026-05-04T22:09:49.009Z ===
+[2026-05-04T22:26:56.145Z] [race-instr] draft:enter {"reqId":2,"bodyContent":"draft B","currentDraft":"draft A","publishedDraft":"","SAVE_COMMIT_DELAY_MS":300}
+[2026-05-04T22:26:56.146Z] [race-instr] publish:enter {"reqId":3,"currentDraftRead":"draft A","publishedDraftBefore":"","SAVE_COMMIT_DELAY_MS":300}
+[2026-05-04T22:26:56.146Z] [race-instr] publish:exit {"reqId":3,"publishedDraft":"draft A","source":"publishedDraft := currentDraft (immediate read — stale if save still committing)","SAVE_COMMIT_DELAY_MS":300}
+[2026-05-04T22:26:56.453Z] [race-instr] draft:commit {"reqId":2,"bodyContent":"draft B","currentDraftBefore":"draft A","SAVE_COMMIT_DELAY_MS":300}
+[2026-05-04T22:26:56.454Z] [race-instr] draft:after-commit {"reqId":2,"currentDraft":"draft B","publishedDraft":"draft A","SAVE_COMMIT_DELAY_MS":300}
+[2026-05-04T22:26:56.455Z] [race-instr] draft:response-sent {"reqId":2,"saved":"draft B","SAVE_COMMIT_DELAY_MS":300}
+[harness] POST /publish → published="draft A"
+[harness] POST /draft "draft B" → saved="draft B"
+[harness] GET /current → {"current":"draft B"}
+[harness] GET /published → {"published":"draft A"}
+=== harness run end 2026-05-04T22:26:56.470Z ===

@@ -14,10 +14,10 @@ Having separate `/draft` and `/publish` handlers with clear state (`currentDraft
 
 ## 4. What can review catch that tests cannot?
 
-Tests here only assert the published string in two scenarios; they don’t judge whether we introduced **production risks**—for example using one global “intent” field for all users, operational misuse of debug logging, or awkward coupling between routes. Review is where someone asks “what did we assume about clients and storage?” even when CI is green.
+Tests here only assert the published string in two scenarios; they don’t judge whether we introduced **production risks**—for example relying on global in-memory state for all users, missing database-write error handling, or awkward coupling between routes. Review is where someone asks “what did we assume about clients and storage?” even when CI is green.
 
 ## 5. Quote from review — why tests wouldn’t surface it
 
-> **“Concurrent overlapping `/draft` requests from multiple clients — `latestDraftIntent` is one global string; last writer wins with no per-session isolation.”**
+> **“Concurrent overlapping `/draft` requests from multiple clients — state is still global. For this single-user toy app that’s fine; in production you’d scope by user/document id.”**
 
 The regression suite never opens two sessions or two documents at once, so it would still pass if that design turned out to be wrong for a real product. A human reviewer still flags the **scaling boundary**: our fix is correct for the assignment’s single in-memory app but not automatically safe if we reused the same pattern in a multi-tenant API without scoping keys.

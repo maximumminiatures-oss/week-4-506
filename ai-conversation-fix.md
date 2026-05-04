@@ -15,9 +15,9 @@ From `trace.txt`, the race is clear:
 - `publish:exit` sets `publishedDraft` to that stale `currentDraft` value (`draft A`).
 - B’s `draft:commit` only runs at `...21.766Z` — after publish already ran.
 
-So the bug is that `/publish` reads **committed** state only. A minimal fix is to track the **latest requested** draft text synchronously when `/draft` is accepted (before the artificial delay), e.g. `latestDraftIntent`, update it on each `/draft`, clear it on `/reset`, and set `publishedDraft = latestDraftIntent` in `/publish`. That matches the trace evidence: publish runs before B commits but still sees `latestDraftIntent === "draft B"` because B’s handler ran first and updated intent.
+So the bug is that `/publish` reads **committed** state too early. A direct fix is to serialize save commits in a small `saveQueue`. Each `/draft` appends its delayed commit to the queue; `/publish` snapshots the queue at the time publish arrives, waits for saves already in flight, and then copies `currentDraft` into `publishedDraft`.
 
-I’ll implement that in `app/server.js` and keep the instrumentation logging `latestDraftIntentRead` on publish so a post-fix harness run shows publish choosing B while `currentDraftRead` can still be A.
+That matches the trace evidence: publish can still enter while `currentDraft` is `"draft A"`, but it waits until the in-flight `"draft B"` save commits, then publishes `"draft B"`. I’ll implement that in `app/server.js` and keep instrumentation showing `publish:enter`, `draft:commit`, `publish:after-await-pending-save`, and `publish:exit`, so a post-fix harness run proves the corrected ordering.
 
 ---
 

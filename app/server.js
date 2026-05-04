@@ -1,7 +1,7 @@
 // Save-and-Publish Draft Editor
 //
-// `/draft` commits after an artificial delay; `/publish` must reflect the latest
-// save request even when that save has not committed yet (see tests/race.test.js).
+// `/draft` commits after an artificial delay; `/publish` waits for any in-flight
+// save before reading the draft to publish (see tests/race.test.js).
 
 const express = require('express');
 const path = require('path');
@@ -20,9 +20,9 @@ app.use(express.static(path.join(__dirname, 'static')));
 // is fine — the bug is in the timing, not the storage.
 let currentDraft = '';
 let publishedDraft = '';
-// Latest payload received on POST /draft (updated synchronously before the delayed commit).
-// Publish reads this so an in-flight save still wins over older committed state.
-let latestDraftIntent = '';
+// Serializes save commits in arrival order. Publish snapshots this queue when
+// it arrives, then waits for saves already in flight before reading state.
+let saveQueue = Promise.resolve();
 
 // SAVE_COMMIT_DELAY_MS controls how long a /draft request takes to commit.
 // In production this would represent database write latency, network latency,
@@ -56,19 +56,18 @@ app.post('/draft', (req, res) => {
     return res.status(400).json({ error: 'content must be a string' });
   }
 
-  latestDraftIntent = content;
-
   const reqId = ++instrumentSeq;
   instrument('draft:enter', {
     reqId,
     bodyContent: content,
-    latestDraftIntent,
     currentDraft,
     publishedDraft,
   });
 
-  // Simulate write latency.
-  setTimeout(() => {
+  const commit = saveQueue.then(() => new Promise((resolve) => {
+    setTimeout(resolve, SAVE_COMMIT_DELAY_MS);
+  }));
+  saveQueue = commit.then(() => {
     instrument('draft:commit', {
       reqId,
       bodyContent: content,
@@ -78,23 +77,28 @@ app.post('/draft', (req, res) => {
     instrument('draft:after-commit', { reqId, currentDraft, publishedDraft });
     res.json({ ok: true, saved: content });
     instrument('draft:response-sent', { reqId, saved: content });
-  }, SAVE_COMMIT_DELAY_MS);
+  });
 });
 
-// POST /publish — mark the most recent draft save request as live.
-app.post('/publish', (req, res) => {
+// POST /publish — mark the most recent saved draft as live.
+app.post('/publish', async (req, res) => {
   const reqId = ++instrumentSeq;
   instrument('publish:enter', {
     reqId,
     currentDraftRead: currentDraft,
-    latestDraftIntentRead: latestDraftIntent,
     publishedDraftBefore: publishedDraft,
   });
-  publishedDraft = latestDraftIntent;
+  const savesBeforePublish = saveQueue;
+  await savesBeforePublish;
+  instrument('publish:after-await-pending-save', {
+    reqId,
+    currentDraftRead: currentDraft,
+  });
+  publishedDraft = currentDraft;
   instrument('publish:exit', {
     reqId,
     publishedDraft,
-    source: 'publishedDraft := latestDraftIntent (sync with latest /draft body)',
+    source: 'publishedDraft := currentDraft (after pending save commit)',
   });
   res.json({ ok: true, published: publishedDraft });
 });
@@ -113,8 +117,8 @@ app.get('/current', (req, res) => {
 app.post('/reset', (req, res) => {
   currentDraft = '';
   publishedDraft = '';
-  latestDraftIntent = '';
-  instrument('reset', { currentDraft, publishedDraft, latestDraftIntent });
+  saveQueue = Promise.resolve();
+  instrument('reset', { currentDraft, publishedDraft });
   res.json({ ok: true });
 });
 
