@@ -21,7 +21,7 @@ async function main() {
     'Scenario: POST /reset → save draft A (await) → save draft B (fire-and-forget) + POST /publish in parallel.',
   );
   console.log(
-    'Expected with broken handler: /publish runs before /draft B commits, so publish copies stale currentDraft (draft A).',
+    'Timing: /publish is issued immediately alongside /draft B; publish handler often runs before B\'s delayed commit. Correct behavior: published text matches the latest save request (draft B), not only what currentDraft had committed at publish time.',
   );
 
   const agent = supertest(app);

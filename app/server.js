@@ -1,7 +1,7 @@
 // Save-and-Publish Draft Editor
 //
-// This app has a known race condition between /draft and /publish.
-// See README.md for the bug description and what you're being asked to do.
+// `/draft` commits after an artificial delay; `/publish` must reflect the latest
+// save request even when that save has not committed yet (see tests/race.test.js).
 
 const express = require('express');
 const path = require('path');
@@ -20,6 +20,9 @@ app.use(express.static(path.join(__dirname, 'static')));
 // is fine — the bug is in the timing, not the storage.
 let currentDraft = '';
 let publishedDraft = '';
+// Latest payload received on POST /draft (updated synchronously before the delayed commit).
+// Publish reads this so an in-flight save still wins over older committed state.
+let latestDraftIntent = '';
 
 // SAVE_COMMIT_DELAY_MS controls how long a /draft request takes to commit.
 // In production this would represent database write latency, network latency,
@@ -53,10 +56,13 @@ app.post('/draft', (req, res) => {
     return res.status(400).json({ error: 'content must be a string' });
   }
 
+  latestDraftIntent = content;
+
   const reqId = ++instrumentSeq;
   instrument('draft:enter', {
     reqId,
     bodyContent: content,
+    latestDraftIntent,
     currentDraft,
     publishedDraft,
   });
@@ -75,23 +81,20 @@ app.post('/draft', (req, res) => {
   }, SAVE_COMMIT_DELAY_MS);
 });
 
-// POST /publish — mark the most recent saved draft as live.
-//
-// THE BUG: this reads currentDraft *immediately*. If a /draft request is
-// in flight (its timeout hasn't fired), publishedDraft will be set to the
-// older saved value, not the in-flight one.
+// POST /publish — mark the most recent draft save request as live.
 app.post('/publish', (req, res) => {
   const reqId = ++instrumentSeq;
   instrument('publish:enter', {
     reqId,
     currentDraftRead: currentDraft,
+    latestDraftIntentRead: latestDraftIntent,
     publishedDraftBefore: publishedDraft,
   });
-  publishedDraft = currentDraft;
+  publishedDraft = latestDraftIntent;
   instrument('publish:exit', {
     reqId,
     publishedDraft,
-    source: 'publishedDraft := currentDraft (immediate read — stale if save still committing)',
+    source: 'publishedDraft := latestDraftIntent (sync with latest /draft body)',
   });
   res.json({ ok: true, published: publishedDraft });
 });
@@ -110,7 +113,8 @@ app.get('/current', (req, res) => {
 app.post('/reset', (req, res) => {
   currentDraft = '';
   publishedDraft = '';
-  instrument('reset', { currentDraft, publishedDraft });
+  latestDraftIntent = '';
+  instrument('reset', { currentDraft, publishedDraft, latestDraftIntent });
   res.json({ ok: true });
 });
 
